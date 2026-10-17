@@ -1,0 +1,26 @@
+# Python bytecode / cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Local credentials & tokens
+token.json
+client_secret.json
+*.txt
+.env
+
+# Generated media artifacts
+*.mp3
+*.mp4
+*.jpg
+*.jpeg
+*.png
+scene_*.jpg
+voice_*.mp3
+final_short.mp4
+
+# OS / IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
