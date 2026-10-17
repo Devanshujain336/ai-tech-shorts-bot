@@ -6,7 +6,6 @@ import urllib.parse
 import textwrap
 import requests
 import feedparser
-import numpy as np
 import PIL.Image
 import PIL.ImageDraw
 import PIL.ImageFont
@@ -26,10 +25,37 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 # ==========================================
+# 0. VERIFY YOUTUBE LOGIN FIRST (2 SECONDS)
+# ==========================================
+def get_youtube_client():
+    print("🔐 Step 0: Verifying YouTube Cloud Login...")
+    # Remove any invisible terminal newlines (\r, \n) or spaces
+    client_id = "".join(os.environ.get("YT_CLIENT_ID", "").split())
+    client_secret = "".join(os.environ.get("YT_CLIENT_SECRET", "").split())
+    refresh_token = "".join(os.environ.get("YT_REFRESH_TOKEN", "").split())
+
+    print(f"🔎 Secret Lengths -> ID: {len(client_id)} | Secret: {len(client_secret)} | Token: {len(refresh_token)}")
+
+    if not client_id or not client_secret or not refresh_token:
+        raise ValueError("❌ One of your YT secrets is empty (length 0)! Check secret names in GitHub Settings and daily_short.yml.")
+
+    creds = Credentials(
+        None,
+        refresh_token=refresh_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=client_id,
+        client_secret=client_secret,
+        scopes=["https://www.googleapis.com/auth/youtube.upload"]
+    )
+    creds.refresh(Request())
+    print("✅ YouTube Login Verified Successfully!")
+    return build("youtube", "v3", credentials=creds)
+
+# ==========================================
 # 1. CONFIGURATION
 # ==========================================
-GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
-VOICE = "en-US-ChristopherNeural"  # Crisp, authoritative tech narrator voice
+GEMINI_API_KEY = "".join(os.environ.get("GEMINI_API_KEY", "").split())
+VOICE = "en-US-ChristopherNeural"
 
 class TechShortPackage(BaseModel):
     title: str = Field(description="Viral YouTube Short title under 55 chars, must end with #ai #tech #shorts")
@@ -43,7 +69,6 @@ class TechShortPackage(BaseModel):
 # ==========================================
 def generate_ai_tech_plan():
     print("📡 Step 1: Scraping breaking AI & Tech News from the last 24 hours...")
-    # Pulls live AI & Tech headlines published in the last 24 hours
     rss_url = "https://news.google.com/rss/search?q=Artificial+Intelligence+OR+OpenAI+OR+Google+Gemini+OR+Robotics+OR+Nvidia+when:1d&hl=en-IN&gl=IN&ceid=IN:en"
     feed = feedparser.parse(rss_url)
     headlines = [entry.title for entry in feed.entries[:15]]
@@ -58,10 +83,10 @@ def generate_ai_tech_plan():
     
     Pick the single most mind-blowing, controversial, or futuristic news story from this list.
     Write a high-retention 6-sentence script (~95 to 110 words total):
-    - Sentence 1: Pattern-interrupt shock hook (e.g., "Stop scrolling, OpenAI just dropped...", "Google just changed AI forever...").
+    - Sentence 1: Pattern-interrupt shock hook.
     - Sentences 2-4: Explain what just happened in simple, exciting language.
     - Sentence 5: Explain how this affects normal people, coders, or jobs.
-    - Sentence 6: Ask a polarizing question to trigger comments (e.g., "Will this replace developers, or are we safe? Comment below!").
+    - Sentence 6: Ask a polarizing question to trigger comments.
     """
     
     response = client.models.generate_content(
@@ -79,7 +104,7 @@ def generate_ai_tech_plan():
     return plan
 
 # ==========================================
-# 3. GENERATE VOICEOVER PER SENTENCE (PERFECT SYNC)
+# 3. GENERATE VOICEOVER PER SENTENCE
 # ==========================================
 async def generate_sentence_audio(sentences):
     print("🎙️ Step 2: Generating synced voiceover segments...")
@@ -95,21 +120,18 @@ async def generate_sentence_audio(sentences):
 # 4. GENERATE AI VISUALS + BURNED-IN SUBTITLES
 # ==========================================
 def draw_subtitle_on_image(img_path, subtitle_text):
-    """Draws clean, high-contrast CapCut-style subtitles onto the 9:16 image"""
     img = PIL.Image.open(img_path).convert("RGBA").resize((1080, 1920))
     overlay = PIL.Image.new("RGBA", img.size, (0, 0, 0, 0))
     draw = PIL.ImageDraw.Draw(overlay)
     
-    # Load default Ubuntu DejaVuSans-Bold or fallback font
     try:
         font = PIL.ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 52)
     except:
         font = PIL.ImageFont.load_default()
         
     wrapped_lines = textwrap.wrap(subtitle_text.upper(), width=24)
-    y_start = 1320  # Lower-middle safe zone (above YouTube Shorts title UI)
+    y_start = 1320
     
-    # Draw semi-transparent dark caption box
     box_height = len(wrapped_lines) * 75 + 40
     draw.rounded_rectangle(
         [(60, y_start - 25), (1020, y_start + box_height - 25)],
@@ -118,7 +140,6 @@ def draw_subtitle_on_image(img_path, subtitle_text):
     )
     
     for line in wrapped_lines:
-        # Draw black stroke + bright yellow/white text
         draw.text((540, y_start), line, font=font, fill=(255, 235, 59, 255), anchor="mt")
         y_start += 75
         
@@ -128,14 +149,11 @@ def draw_subtitle_on_image(img_path, subtitle_text):
 def build_synced_video(plan, audio_files, output_file="final_short.mp4"):
     print("🎨 Step 3: Generating 9:16 AI Tech Visuals & Burning Subtitles...")
     video_clips = []
-    audio_clips = []
     
     for i, (sentence, img_prompt, audio_path) in enumerate(zip(plan["sentences"], plan["image_prompts"], audio_files)):
         a_clip = AudioFileClip(audio_path)
         duration = a_clip.duration
-        audio_clips.append(a_clip)
         
-        # Generate 1080x1920 AI image via Pollinations Flux
         styled_prompt = f"{img_prompt}, futuristic technology, cyberpunk glow, unreal engine 5 render, 8k, vertical 9:16"
         encoded = urllib.parse.quote(styled_prompt)
         url = f"https://image.pollinations.ai/prompt/{encoded}?width=1080&height=1920&nologo=true&seed={i+100}"
@@ -147,13 +165,11 @@ def build_synced_video(plan, audio_files, output_file="final_short.mp4"):
                 with open(img_path, "wb") as f:
                     f.write(r.content)
             else:
-                raise Exception("Fallback to gradient")
+                raise Exception("Fallback")
         except Exception:
-            # Automatic fallback dark-tech canvas if image server is busy
             fallback = PIL.Image.new("RGB", (1080, 1920), (15, 23, 42))
             fallback.save(img_path)
             
-        # Apply slow zoom first, or burn subtitle cleanly
         draw_subtitle_on_image(img_path, sentence)
         
         v_clip = ImageClip(img_path).set_duration(duration).set_audio(a_clip)
@@ -162,7 +178,6 @@ def build_synced_video(plan, audio_files, output_file="final_short.mp4"):
         
     final_video = concatenate_videoclips(video_clips, method="compose")
     
-    # Mix background music if bg_music.mp3 is in the repo
     if os.path.exists("bg_music.mp3"):
         print("🎵 Mixing background music...")
         bg = AudioFileClip("bg_music.mp3").subclip(0, final_video.duration).volumex(0.10)
@@ -175,7 +190,6 @@ def build_synced_video(plan, audio_files, output_file="final_short.mp4"):
 # 5. SCHEDULE AT BEST TIME & UPLOAD TO YOUTUBE
 # ==========================================
 def get_best_publish_time():
-    """Schedules for today/tomorrow at 6:00 PM IST (12:30 PM UTC)"""
     now_utc = datetime.datetime.now(datetime.timezone.utc)
     target_date = now_utc.date()
     if now_utc.hour >= 12:
@@ -183,19 +197,8 @@ def get_best_publish_time():
     publish_dt = datetime.datetime(target_date.year, target_date.month, target_date.day, 12, 30, 0)
     return publish_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-def upload_to_youtube(video_path, plan):
+def upload_to_youtube(youtube, video_path, plan):
     print("🚀 Step 4: Uploading & Scheduling to YouTube...")
-    creds = Credentials(
-        None,
-        refresh_token=os.environ["YT_REFRESH_TOKEN"],
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=os.environ["YT_CLIENT_ID"],
-        client_secret=os.environ["YT_CLIENT_SECRET"],
-        scopes=["https://www.googleapis.com/auth/youtube.upload"]
-    )
-    creds.refresh(Request())
-    youtube = build("youtube", "v3", credentials=creds)
-    
     publish_at = get_best_publish_time()
     
     body = {
@@ -203,7 +206,7 @@ def upload_to_youtube(video_path, plan):
             "title": plan["title"][:95],
             "description": plan["description"],
             "tags": plan["tags"],
-            "categoryId": "28"  # 28 = Science & Technology
+            "categoryId": "28"
         },
         "status": {
             "privacyStatus": "private",
@@ -219,7 +222,8 @@ def upload_to_youtube(video_path, plan):
     print(f"🎉 SUCCESS! Video ID: {response['id']} scheduled for {publish_at} (6:00 PM IST)")
 
 if __name__ == "__main__":
+    youtube_client = get_youtube_client()
     plan = generate_ai_tech_plan()
     audio_files = asyncio.run(generate_sentence_audio(plan["sentences"]))
     video_file = build_synced_video(plan, audio_files)
-    upload_to_youtube(video_file, plan)
+    upload_to_youtube(youtube_client, video_file, plan)
