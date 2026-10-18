@@ -274,9 +274,12 @@ def render_viral_short(clip_files, audio_files, durations, ass_file, output_file
     sfx_clip = AudioFileClip(sfx_file)
     
     layers = [full_voice, sfx_clip]
-    if os.path.exists("bg_music.mp3"):
-        bg = AudioFileClip("bg_music.mp3").subclip(0, full_voice.duration).volumex(0.12)
-        layers.append(bg)
+    if os.path.exists("bg_music.mp3") and os.path.getsize("bg_music.mp3") > 10000:
+        try:
+            bg = AudioFileClip("bg_music.mp3").subclip(0, full_voice.duration).volumex(0.12)
+            layers.append(bg)
+        except Exception as e:
+            print(f"⚠️ Skipping invalid bg_music.mp3 ({e}), using built-in cyber beat.")
         
     final_audio = CompositeAudioClip(layers)
     final_audio.write_audiofile("master_audio.m4a", fps=44100, codec="aac")
