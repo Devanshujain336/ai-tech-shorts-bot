@@ -51,13 +51,13 @@ class CinematicShort(BaseModel):
     title: str = Field(description="Viral YouTube Short title under 55 chars, must end with #ai #tech #shorts")
     description: str = Field(description="2-sentence summary of the AI news + 10 viral tech hashtags")
     tags: list[str] = Field(description="8 high-volume search tags")
-    hook_badge: str = Field(description="3-4 word shocking headline banner for the first 3 seconds, e.g. 'SECRET AI LEAK'")
-    sentences: list[str] = Field(description="Exactly 6 dramatic, documentary-style spoken sentences (~100 words total). Frame the news as a massive threat, opportunity, or secret.")
-    ai_image_prompts: list[str] = Field(description="Exactly 6 highly specific, hyper-realistic image prompts. E.g., 'Sam Altman looking stressed in a dark server room, cyberpunk neon lights, 8k cinematic' or 'A glowing red AI brain consuming the internet, dystopian, hyperrealistic'. NO TEXT IN IMAGES.")
-    pixabay_fallbacks: list[str] = Field(description="Exactly 6 simple 1-2 word Pixabay search terms matching each scene just in case.")
+    hook_badge: str = Field(description="3-4 word shocking headline banner for the first 3 seconds")
+    sentences: list[str] = Field(description="Exactly 5 extremely short, punchy sentences (MAXIMUM 75 WORDS TOTAL).")
+    ai_image_prompts: list[str] = Field(description="Exactly 5 highly specific, hyper-realistic image prompts. Focus on specific billionaires, glowing tech, dystopian vibes, 8k cinematic. NO TEXT IN IMAGES.")
+    pixabay_fallbacks: list[str] = Field(description="Exactly 5 simple 1-2 word Pixabay search terms matching each scene.")
 
 # ==========================================
-# 2. ROTATING NICHE & SCRIPT GENERATION
+# 2. ROTATING NICHE & STRICT SCRIPT GEN
 # ==========================================
 def generate_ai_tech_plan():
     print("📡 Step 1: Scraping AI News (V3 Cinematic Engine)...")
@@ -79,8 +79,9 @@ def generate_ai_tech_plan():
     You are writing a script for a viral, documentary-style Tech YouTube Short (Niche: {sub_niche}).
     Headlines from today: {headlines}
     
-    Pick the craziest story. Write a 6-sentence script that feels like a thrilling movie trailer.
-    Provide 6 incredibly detailed prompts for an AI Image Generator (Midjourney style) to create visuals for each sentence. Focus on specific billionaires, glowing tech, dystopian or futuristic vibes, cinematic lighting, and intense emotions.
+    Pick the craziest story. Write a 5-sentence script that feels like a thrilling movie trailer.
+    CRITICAL RULE: The ENTIRE script must be under 75 words. If it is too long, YouTube will not accept it as a Short. Keep it fast and dramatic.
+    Provide 5 incredibly detailed prompts for an AI Image Generator for each sentence.
     """
     
     for attempt in range(1, 4):
@@ -96,40 +97,38 @@ def generate_ai_tech_plan():
     raise RuntimeError("❌ Gemini API failed after 3 retries.")
 
 # ==========================================
-# 3. VOICE & CINEMATIC SOUND DESIGN (BOOM + SFX)
+# 3. FAST VOICE & CINEMATIC SOUND DESIGN
 # ==========================================
 async def generate_voiceover_and_timings(sentences):
-    print("🎙️ Step 2: Generating documentary voiceover...")
+    print("🎙️ Step 2: Generating fast documentary voiceover...")
     audio_files, durations = [], []
     for i, sentence in enumerate(sentences):
         filename = f"voice_{i}.mp3"
-        communicate = edge_tts.Communicate(sentence, VOICE, rate="+15%", pitch="-2Hz") # Slightly deeper/slower for documentary feel
+        communicate = edge_tts.Communicate(sentence, VOICE, rate="+25%", pitch="-2Hz") 
         await communicate.save(filename)
         clip = AudioFileClip(filename)
         durations.append(clip.duration)
         clip.close()
         audio_files.append(filename)
+    
+    total_duration = sum(durations)
+    print(f"⏱️ TOTAL VIDEO DURATION: {total_duration:.2f} seconds (Must be < 60s)")
     return audio_files, durations
 
 def generate_cinematic_audio(total_duration, cut_times):
-    """Generates a massive cinematic BOOM at 0s, dark drone BGM, and cut whooshes"""
     sr = 44100
     t = np.linspace(0, total_duration, int(sr * total_duration), endpoint=False)
-    
-    # 1. Dark ambient drone (Hans Zimmer style)
     bgm = 0.08 * np.sin(2 * np.pi * 45 * t) + 0.04 * np.sin(2 * np.pi * 90 * t)
     
-    # 2. Massive Cinematic BOOM on the very first frame (Shock hook)
     boom_len = int(2.5 * sr)
     if boom_len < len(bgm):
         boom_t = np.linspace(0, 1, boom_len)
         boom_env = np.exp(-3 * boom_t)
-        boom_freq = 150 * np.exp(-5 * boom_t) + 30 # Drops from 180Hz to 30Hz fast
+        boom_freq = 150 * np.exp(-5 * boom_t) + 30 
         boom_wave = 0.8 * np.sin(2 * np.pi * boom_freq * boom_t) * boom_env
-        distortion = np.clip(boom_wave * 3, -0.6, 0.6) # Add gritty distortion
+        distortion = np.clip(boom_wave * 3, -0.6, 0.6) 
         bgm[:boom_len] += distortion
 
-    # 3. Quick whooshes on cuts
     for ct in cut_times:
         idx = int(ct * sr)
         length = int(0.3 * sr)
@@ -152,12 +151,10 @@ def generate_cinematic_audio(total_duration, cut_times):
 # 4. FETCH AI ART + PIXABAY FALLBACK + KEN BURNS
 # ==========================================
 def fetch_ai_or_stock_video(ai_prompt, pixabay_query, duration, idx):
-    """Tries to generate Custom AI Art. Falls back to Pixabay. Applies Ken Burns zoom."""
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     img_path = f"scene_img_{idx}.jpg"
     out_video = f"scene_vid_{idx}.mp4"
     
-    # 1. Try Custom AI Image (Flux)
     success = False
     styled_prompt = f"{ai_prompt}, highly detailed, cinematic lighting, 8k resolution, unreal engine 5"
     encoded_q = urllib.parse.quote(styled_prompt)
@@ -166,7 +163,7 @@ def fetch_ai_or_stock_video(ai_prompt, pixabay_query, duration, idx):
     for _ in range(2):
         try:
             r = requests.get(url, headers=headers, timeout=15)
-            if r.status_code == 200 and len(r.content) > 30000: # Real image is large
+            if r.status_code == 200 and len(r.content) > 30000:
                 with open(img_path, "wb") as f:
                     f.write(r.content)
                 success = True
@@ -175,18 +172,16 @@ def fetch_ai_or_stock_video(ai_prompt, pixabay_query, duration, idx):
             time.sleep(2)
             
     if success:
-        # Generate Ken Burns Zoom-In effect via FFmpeg
-        # zoompan slowly zooms from 1x to 1.15x over the duration
         frames = int(duration * 30)
+        # CRITICAL FIX: s=1080x1920 added inside zoompan to prevent horizontal squashing!
         cmd = [
             "ffmpeg", "-y", "-loop", "1", "-i", img_path, "-t", f"{duration:.3f}",
-            "-vf", f"scale=1080:1920,zoompan=z='min(zoom+0.0008,1.15)':d={frames}:x='iw/2-(iw/zoom)/2':y='ih/2-(ih/zoom)/2',vignette=PI/3,fps=30",
+            "-vf", f"scale=1080:1920,zoompan=z='min(zoom+0.0008,1.15)':d={frames}:x='iw/2-(iw/zoom)/2':y='ih/2-(ih/zoom)/2':s=1080x1920,vignette=PI/3,fps=30",
             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "20", "-pix_fmt", "yuv420p", out_video
         ]
         subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return out_video
 
-    # 2. Fallback to Pixabay Video if AI Art generator is blocked
     print(f"   ⚠️ AI Image failed for scene {idx}, falling back to Pixabay: '{pixabay_query}'")
     video_url = None
     try:
@@ -209,7 +204,6 @@ def fetch_ai_or_stock_video(ai_prompt, pixabay_query, duration, idx):
         subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return out_video
         
-    # 3. Absolute Last Resort: Dark Tech Gradient
     subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", f"color=c=black:s=1080x1920:d={duration:.3f}", "-c:v", "libx264", out_video], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return out_video
 
@@ -219,7 +213,7 @@ def build_visuals(plan, durations):
     for i, (ai_prompt, pix_query, dur) in enumerate(zip(plan["ai_image_prompts"], plan["pixabay_fallbacks"], durations)):
         video_file = fetch_ai_or_stock_video(ai_prompt, pix_query, dur, i)
         clips.append(video_file)
-        print(f"   ✅ Scene {i+1}/6 Rendered ({dur:.1f}s)")
+        print(f"   ✅ Scene {i+1}/5 Rendered ({dur:.1f}s)")
     return clips
 
 # ==========================================
@@ -248,7 +242,6 @@ Style: TopBadge,Arial,55,&H000000FF,&H000000FF,&H00FFFFFF,&HC0000000,-1,0,0,0,10
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     events = []
-    # Red background badge for hook
     events.append(f"Dialogue: 1,0:00:00.00,0:00:03.50,TopBadge,,0,0,0,,🚨 {hook_badge.upper()} 🚨")
     
     current_time = 0.0
@@ -261,12 +254,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             chunk_dur = dur * (len(chunk) / total_chars)
             start_str, end_str = format_ass_time(current_time), format_ass_time(current_time + chunk_dur)
             
-            # Colors: Alternate between White, Warning Yellow (&H0000D7FF&), and Tech Cyan (&H00FFEA00&)
             color = "&H00FFFFFF&"
             if idx % 3 == 1: color = "&H0000D7FF&" # Yellow
             elif idx % 3 == 2: color = "&H00FFEA00&" # Cyan
             
-            # Intense Pop-up Zoom animation
             anim = "{\\fscx135\\fscy135\\t(0,100,\\fscx100\\fscy100)}"
             events.append(f"Dialogue: 0,{start_str},{end_str},PopWord,,0,0,0,,{anim}{{\\c{color}}}{chunk.upper()}")
             current_time += chunk_dur
