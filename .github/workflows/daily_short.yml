@@ -1,7 +1,5 @@
 name: Daily AI Tech YouTube Short
 
-name: Daily AI Tech YouTube Short
-
 on:
   schedule:
     # 10:00 AM IST
