@@ -330,12 +330,11 @@ def render_and_upload(clips, audio_files, durations, plan, ass_file):
     
     voice_clips = [AudioFileClip(af) for af in audio_files]
     full_voice = concatenate_audioclips(voice_clips)
-    
+
     cut_times = np.cumsum(durations)[:-1]
-    sfx_file = generate_cinematic_audio(full_voice.duration, cut_times)
-    sfx_clip = AudioFileClip(sfx_file)
+    sfx_composite = generate_cinematic_audio(full_voice.duration, cut_times)
     
-    final_audio = CompositeAudioClip([full_voice, sfx_clip])
+    final_audio = CompositeAudioClip([full_voice, sfx_composite])
     final_audio.write_audiofile("master_audio.m4a", fps=44100, codec="aac", logger=None)
     
     output_file = "final_short.mp4"
