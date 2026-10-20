@@ -1,10 +1,20 @@
 name: Daily AI Tech YouTube Short
 
+name: Daily AI Tech YouTube Short
+
 on:
   schedule:
+    # 10:00 AM IST
     - cron: '30 4 * * *'
-  workflow_dispatch:
 
+    # 5:30 PM IST
+    - cron: '0 12 * * *'
+
+    # 9:00 PM IST
+    - cron: '30 15 * * *'
+
+  workflow_dispatch:
+  
 jobs:
   build-and-upload:
     runs-on: ubuntu-latest
