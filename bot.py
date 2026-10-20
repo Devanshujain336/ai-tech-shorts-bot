@@ -19,6 +19,7 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
+from groq import Groq
 
 # ==========================================
 # 0. VERIFY YOUTUBE LOGIN
@@ -58,9 +59,13 @@ class CinematicShort(BaseModel):
 
 # ==========================================
 # 2. ROTATING NICHE & STRICT SCRIPT GEN
+
+
+# ==========================================
+# 2. MULTI-PROVIDER LLM ROUTER (GEMINI + GROQ)
 # ==========================================
 def generate_ai_tech_plan():
-    print("📡 Step 1: Scraping AI News (V3 Cinematic Engine)...")
+    print("📡 Step 1: Scraping AI News (Multi-Provider Fallback Engine)...")
     now_utc = datetime.datetime.now(datetime.timezone.utc)
     
     if now_utc.hour < 7:
@@ -74,27 +79,75 @@ def generate_ai_tech_plan():
     feed = feedparser.parse(rss_url)
     headlines = [entry.title for entry in feed.entries[:15]]
     
-    client = genai.Client(api_key=GEMINI_API_KEY)
     prompt = f"""
     You are writing a script for a viral, documentary-style Tech YouTube Short (Niche: {sub_niche}).
     Headlines from today: {headlines}
     
     Pick the craziest story. Write a 5-sentence script that feels like a thrilling movie trailer.
-    CRITICAL RULE: The ENTIRE script must be under 75 words. If it is too long, YouTube will not accept it as a Short. Keep it fast and dramatic.
-    Provide 5 incredibly detailed prompts for an AI Image Generator for each sentence.
+    CRITICAL RULE: The ENTIRE script must be under 75 words. 
+    Provide 5 incredibly detailed prompts for an AI Image Generator for each sentence. NO TEXT IN IMAGES.
     """
-    
-    for attempt in range(1, 4):
-        try:
-            response = client.models.generate_content(
-                model="gemini-3.8-flash",
-                contents=prompt,
-                config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=CinematicShort, temperature=0.8)
-            )
-            return json.loads(response.text)
-        except Exception as e:
-            time.sleep(5)
-    raise RuntimeError("❌ Gemini API failed after 3 retries.")
+
+    # 1. Try Gemini Models First
+    if GEMINI_API_KEY:
+        client_gemini = genai.Client(api_key=GEMINI_API_KEY)
+        gemini_models = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-1.5-flash"]
+        
+        for model in gemini_models:
+            for attempt in range(1, 3):
+                try:
+                    print(f"   🤖 Trying Gemini ({model})...")
+                    response = client_gemini.models.generate_content(
+                        model=model,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                            response_schema=CinematicShort,
+                            temperature=0.75
+                        )
+                    )
+                    if response and response.text:
+                        print(f"   ✅ Success with Gemini model: {model}")
+                        return json.loads(response.text)
+                except Exception as e:
+                    print(f"   ⚠️ Gemini {model} failed ({e}). Retrying...")
+                    time.sleep(2)
+
+    # 2. Fallback to Groq (Llama 3.3) if Gemini is down or key is missing
+    GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+    if GROQ_API_KEY:
+        print("   🔄 Failing over to Groq (Llama 3.3)...")
+        client_groq = Groq(api_key=GROQ_API_KEY)
+        
+        system_prompt = """You are a JSON-only API. Output valid JSON matching this schema:
+{
+  "title": "Viral YouTube Short title under 55 chars ending with #ai #tech #shorts",
+  "description": "2-sentence summary + 10 viral tech hashtags",
+  "tags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6", "tag7", "tag8"],
+  "hook_badge": "3-4 word shocking headline banner",
+  "sentences": ["Sentence 1", "Sentence 2", "Sentence 3", "Sentence 4", "Sentence 5 (max 75 words total)"],
+  "ai_image_prompts": ["Prompt 1", "Prompt 2", "Prompt 3", "Prompt 4", "Prompt 5"],
+  "pixabay_fallbacks": ["query1", "query2", "query3", "query4", "query5"]
+}"""
+
+        for attempt in range(1, 4):
+            try:
+                completion = client_groq.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.75
+                )
+                print("   ✅ Success with Groq Llama 3.3 fallback!")
+                return json.loads(completion.choices[0].message.content)
+            except Exception as e:
+                print(f"   ⚠️ Groq attempt {attempt} failed ({e}). Retrying...")
+                time.sleep(3)
+
+    raise RuntimeError("❌ Both Gemini and Groq providers failed to return a valid script after full failover cascade.")
 
 # ==========================================
 # 3. FAST VOICE & CINEMATIC SOUND DESIGN
