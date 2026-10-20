@@ -6,6 +6,7 @@ __pycache__/
 # Local credentials & tokens
 token.json
 client_secret.json
+get_token.py
 *.txt
 .env
 
@@ -18,6 +19,10 @@ client_secret.json
 scene_*.jpg
 voice_*.mp3
 final_short.mp4
+
+# Whitelist documentation images
+!images/
+!images/**
 
 # OS / IDE files
 .DS_Store
