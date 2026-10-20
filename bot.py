@@ -150,29 +150,16 @@ def generate_ai_tech_plan():
     raise RuntimeError("❌ Both Gemini and Groq providers failed to return a valid script after full failover cascade.")
 
 # ==========================================
-# 3. FAST VOICE & CINEMATIC SOUND DESIGN
+# 3. VOICE & CINEMATIC SOUND DESIGN (WITH bg_music.mp3)
 # ==========================================
-async def generate_voiceover_and_timings(sentences):
-    print("🎙️ Step 2: Generating fast documentary voiceover...")
-    audio_files, durations = [], []
-    for i, sentence in enumerate(sentences):
-        filename = f"voice_{i}.mp3"
-        communicate = edge_tts.Communicate(sentence, VOICE, rate="+25%", pitch="-2Hz") 
-        await communicate.save(filename)
-        clip = AudioFileClip(filename)
-        durations.append(clip.duration)
-        clip.close()
-        audio_files.append(filename)
-    
-    total_duration = sum(durations)
-    print(f"⏱️ TOTAL VIDEO DURATION: {total_duration:.2f} seconds (Must be < 60s)")
-    return audio_files, durations
-
 def generate_cinematic_audio(total_duration, cut_times):
     sr = 44100
     t = np.linspace(0, total_duration, int(sr * total_duration), endpoint=False)
-    bgm = 0.08 * np.sin(2 * np.pi * 45 * t) + 0.04 * np.sin(2 * np.pi * 90 * t)
     
+    # 1. Base ambient synth
+    bgm = 0.05 * np.sin(2 * np.pi * 45 * t) + 0.02 * np.sin(2 * np.pi * 90 * t)
+    
+    # 2. Massive Cinematic BOOM on the very first frame (Shock hook)
     boom_len = int(2.5 * sr)
     if boom_len < len(bgm):
         boom_t = np.linspace(0, 1, boom_len)
@@ -182,6 +169,7 @@ def generate_cinematic_audio(total_duration, cut_times):
         distortion = np.clip(boom_wave * 3, -0.6, 0.6) 
         bgm[:boom_len] += distortion
 
+    # 3. Quick whooshes on cuts
     for ct in cut_times:
         idx = int(ct * sr)
         length = int(0.3 * sr)
@@ -198,7 +186,18 @@ def generate_cinematic_audio(total_duration, cut_times):
         wf.setsampwidth(2)
         wf.setframerate(sr)
         wf.writeframes(pcm.tobytes())
-    return "cinematic_sfx.wav"
+        
+    # 4. If you uploaded a real bg_music.mp3 file to GitHub, mix it in!
+    audio_layers = [AudioFileClip("cinematic_sfx.wav")]
+    if os.path.exists("bg_music.mp3") and os.path.getsize("bg_music.mp3") > 10000:
+        try:
+            print("🎵 Mixing your custom bg_music.mp3 into the video...")
+            custom_bg = AudioFileClip("bg_music.mp3").subclip(0, total_duration).volumex(0.15)
+            audio_layers.append(custom_bg)
+        except Exception as e:
+            print(f"⚠️ Could not load bg_music.mp3 ({e}), using built-in sfx only.")
+            
+    return CompositeAudioClip(audio_layers)
 
 # ==========================================
 # 4. FETCH AI ART + PIXABAY FALLBACK + KEN BURNS
